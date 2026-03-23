@@ -33,7 +33,7 @@
         #copilot-cursor {
             display: none; /* Hidden until data is received */
             opacity: 0.9;
-            filter: hue-rotate(90deg); /* Shift color so it looks different */
+            /* Note: hue-rotate removed so your custom SVG colors show correctly */
         }
 
         /* Add a label so you know who is who */
@@ -63,7 +63,7 @@
 <body>
 
     <div id="local-cursor" class="cursor"></div>
-    <div id="copilot-cursor" class="cursor state-hand"></div>
+    <div id="copilot-cursor" class="cursor"></div>
 
     <script>
         const io = require('socket.io-client');
@@ -79,32 +79,36 @@
             console.log("✅ Pilot Connected to Bridge");
         });
 
-      // 2. UNIFIED LISTENER (Both Pilot and Co-Pilot use 'ppMessage' now)
-socket.on('ppMessage', (data) => {
-    
-    // A. CHANGE CURSOR (Pilot Logic)
-    if (data.messageId === 'CHANGE_CURSOR') {
-        updateCursorVisuals(localCursor, data.value);
-    }
-
-    // B. CO-PILOT MOVE (Remote Logic)
-    if (data.messageId === 'CO_PILOT_MOVE') {
-        try {
-            // Unpack the string back into X and Y numbers
-            const coords = JSON.parse(data.value);
+        // 2. UNIFIED LISTENER (Both Pilot and Co-Pilot use 'ppMessage' now)
+        socket.on('ppMessage', (data) => {
             
-            copilotCursor.style.display = 'block';
-            copilotCursor.style.left = coords.x + 'px';
-            copilotCursor.style.top = coords.y + 'px';
-        } catch (err) {
-            console.error("Failed to parse Co-Pilot coords", err);
-        }
-    }
-});
+            // A. CHANGE CURSOR (Pilot Logic)
+            if (data.messageId === 'CHANGE_CURSOR') {
+                updateCursorVisuals(localCursor, data.value);
+            }
 
-      
+            // B. CO-PILOT MOVE (Remote Logic)
+            if (data.messageId === 'CO_PILOT_MOVE') {
+                try {
+                    // Unpack the string back into X and Y numbers
+                    const coords = JSON.parse(data.value);
+                    
+                    copilotCursor.style.display = 'block';
+                    copilotCursor.style.left = coords.x + 'px';
+                    copilotCursor.style.top = coords.y + 'px';
+                } catch (err) {
+                    console.error("Failed to parse Co-Pilot coords", err);
+                }
+            }
 
-        // 4. LISTEN FOR LOCAL MOUSE (From Main.js)
+            // C. CO-PILOT STATE (NEW FEATURE - MISSING IN YOUR VERSION)
+            // This listens for commands to change the Co-Pilot's icon (e.g., SVGs)
+            if (data.messageId === 'CO_PILOT_STATE') {
+                updateCursorVisuals(copilotCursor, data.value);
+            }
+        });
+
+        // 3. LISTEN FOR LOCAL MOUSE (From Main.js)
         ipcRenderer.on('MOUSE_POSITION', (event, { x, y }) => {
             localCursor.style.left = x + 'px';
             localCursor.style.top = y + 'px';
