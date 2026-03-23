@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cursor Overlay</title>
+    <style>
+        body {
+            background: transparent;
+            margin: 0;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* --- SHARED CURSOR STYLES --- */
+        .cursor {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            pointer-events: none;
+            z-index: 9999;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        /* --- PILOT (Local User) --- */
+        #local-cursor {
+            display: none; /* Hidden by default until active */
+        }
+
+        /* --- CO-PILOT (Remote User) --- */
+        #copilot-cursor {
+            display: none; /* Hidden until data is received */
+            opacity: 0.9;
+            filter: hue-rotate(90deg); /* Shift color so it looks different */
+        }
+
+        /* Add a label so you know who is who */
+        #copilot-cursor::after {
+            content: "Co-Pilot";
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #FF9F1C;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: sans-serif;
+            font-size: 10px;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* --- ASSET CLASSES --- */
+        /* Ensure you have these PNGs in your /assets folder! */
+        .state-hand { background-image: url('./assets/hand.png'); }
+        .state-wait { background-image: url('./assets/wait.png'); }
+        .state-pencil { background-image: url('./assets/pencil.png'); }
+    </style>
+</head>
+<body>
+
+    <div id="local-cursor" class="cursor"></div>
+    <div id="copilot-cursor" class="cursor state-hand"></div>
+
+    <script>
+        const io = require('socket.io-client');
+        const { ipcRenderer } = require('electron');
+
+        const localCursor = document.getElementById('local-cursor');
+        const copilotCursor = document.getElementById('copilot-cursor');
+
+        // 1. CONNECT TO PROTOPIE CONNECT (LOCALHOST)
+        const socket = io('http://localhost:9981');
+
+        socket.on('connect', () => {
+            console.log("✅ Pilot Connected to Bridge");
+        });
+
+      // 2. UNIFIED LISTENER (Both Pilot and Co-Pilot use 'ppMessage' now)
+socket.on('ppMessage', (data) => {
+    
+    // A. CHANGE CURSOR (Pilot Logic)
+    if (data.messageId === 'CHANGE_CURSOR') {
+        updateCursorVisuals(localCursor, data.value);
+    }
+
+    // B. CO-PILOT MOVE (Remote Logic)
+    if (data.messageId === 'CO_PILOT_MOVE') {
+        try {
+            // Unpack the string back into X and Y numbers
+            const coords = JSON.parse(data.value);
+            
+            copilotCursor.style.display = 'block';
+            copilotCursor.style.left = coords.x + 'px';
+            copilotCursor.style.top = coords.y + 'px';
+        } catch (err) {
+            console.error("Failed to parse Co-Pilot coords", err);
+        }
+    }
+});
+
+      
+
+        // 4. LISTEN FOR LOCAL MOUSE (From Main.js)
+        ipcRenderer.on('MOUSE_POSITION', (event, { x, y }) => {
+            localCursor.style.left = x + 'px';
+            localCursor.style.top = y + 'px';
+        });
+
+        // Helper: Logic to switch between SVG, URL, or PNG Class
+        function updateCursorVisuals(element, value) {
+            element.className = 'cursor'; // Reset
+            element.style.backgroundImage = '';
+            element.innerHTML = '';
+
+            if (!value || value === 'default') {
+                element.style.display = 'none';
+                return;
+            }
+            element.style.display = 'block';
+
+            if (value.trim().startsWith('<svg')) {
+                element.innerHTML = value; // Raw SVG
+            } else if (value.includes('http') || value.includes('data:image')) {
+                element.style.backgroundImage = `url('${value}')`; // URL/Base64
+            } else {
+                element.classList.add(`state-${value}`); // Legacy PNG class
+            }
+        }
+    </script>
+</body>
+</html>
